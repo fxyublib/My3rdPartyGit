@@ -1,0 +1,126 @@
+一、FreeImage 简介
+
+FreeImage 是一款免费的、开源的、跨平台（Windows 、Linux 和Mac OS X ）的，支持20 多种图像类型的（如BMP 、JPEG 、GIF 、PNG 、TIFF 等）图像处理库。其最大优点就是采用插件驱动型架构，具有快速、灵活、简单易用的特点，得到了广泛使用。相关的源码、库文件及帮助文档可以从http://freeimage.sourceforge.net/ 免费下载使用。下载最新的FreeImage 3.14.1 [WIN32], 解压缩该FreeImage3141Win32.zip文件，包含FreeImage.h、FreeImage.lib和 FreeImage.dll 文件。
+
+FreeImage 的主要功能有多格式位图的读写；方便的位图信息获取；位深度转换；位图页面访问；基本的几何变换和点处理；通道合并与混合等。FreeImage 暂时不支持矢量图形和高级图像处理，位图绘制需要由用户来完成。 FreeImage 中的所有函数都以FreeImage_ 开头，如图像文件的读写函数分别为FreeImage_Load 和FreeImage_Save 。FIBITMAP 数据结构保存着位图信息和像素数据，是FreeImage 的核心。
+
+
+
+
+注意：使用FreeImage库前，须将FreeImage动态库FreeImage.dll,FreeImage.lib和头文件FreeImage.h放在工程目录下，并将FreeImage.lib添加到工程中，可在工程中使用#pragma commet(lib,"FreeImage.lib"宏，或直接在Project->Settings->Link选项中添加。比添加头文件FreeImage.h在相应的地方。
+
+第一步：通用图像加载；
+
+通用图像的加载函数：FIBITMAP* GenericLoader(const char *ptrFileName)
+ 
+    FIBITMAP* CGenericPictureReaderView::GenericLoader(const char *ptrFileName)  
+    {  
+        FREE_IMAGE_FORMAT fif = FIF_UNKNOWN;  
+          
+        fif = FreeImage_GetFileType(ptrFileName);  
+        if(fif == FIF_UNKNOWN)  
+        {  
+            fif = FreeImage_GetFIFFromFilename(ptrFileName);  
+        }  
+        if(fif != FIF_UNKNOWN && FreeImage_FIFSupportsReading(fif))  
+        {  
+            FIBITMAP* dib = FreeImage_Load(fif,ptrFileName,0);  
+              
+            return dib;  
+        }  
+        return NULL;  
+    }  
+
+
+
+第二步：设置菜单栏的打开操作的消息响应函数；
+
+其代码如下：
+ 
+    void CGenericPictureReaderView::OnFileOpen()   
+    {  
+        // TODO: Add your command handler code here  
+        // TODO: Add your command handler code here  
+        CFileDialog fileDlg(TRUE,NULL,"*.*",OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT,  
+        "all(*.*)|*.*|bmp(*.bmp)|*.bmp|/  
+        jpg(*.jpg)|*.jpg|png(*.png)|*.png|/  
+        tif(*.tif)|*.tif|gif(*.gif)|*.gif|/  
+        psd(*.psd)|*.psd|pgm(*.pgm)|*pgm||",  
+        NULL);  
+          
+        RECT rt;  
+        GetClientRect(&rt);  
+        if(IDOK == fileDlg.DoModal())  
+        {  
+            strFileName = fileDlg.GetPathName();  
+    //      SetWindowText(strFileName);  
+            AfxGetMainWnd()->SetWindowText(strFileName);  
+            InvalidateRect(&rt);  
+        }  
+    }  
+
+
+
+第三步：显示图像
+
+图像分为两种类型，第一种：没有调色板的图像，直接使用StretchDIBit函数绘制。第二种：使用调色板，先载入调色板，然后使用StretchDIBit函数绘制。
+
+有调色板的图像，先要创建调色板，下面就是根据FIBITMAP创建调色板的函数：
+
+    HPALETTE CGenericPictureReaderView::GetPalette(FIBITMAP *dib)  
+    {  
+        struct    
+        {  
+            WORD Version;  
+            WORD NumberOfEntries;  
+            PALETTEENTRY palPalEntry[256];  
+        } palette = {0x300,256};  
+      
+        RGBQUAD* ptrRGBTable = FreeImage_GetPalette(dib);  
+        UINT nClrUsed = FreeImage_GetColorsUsed(dib);  
+        for(UINT i=0;i<nClrUsed;i++)  
+        {  
+            palette.palPalEntry[i].peBlue = ptrRGBTable[i].rgbBlue;  
+            palette.palPalEntry[i].peGreen = ptrRGBTable[i].rgbGreen;  
+            palette.palPalEntry[i].peRed = ptrRGBTable[i].rgbRed;  
+            palette.palPalEntry[i].peFlags = 0;  
+        }  
+      
+        HPALETTE Palette = CreatePalette((LPLOGPALETTE)&palette);  
+      
+        return Palette;  
+    }  
+
+在OnDraw函数中进行绘制操作：
+ void CGenericPictureReaderView::OnDraw(CDC* pDC)  
+    {  
+        CGenericPictureReaderDoc* pDoc = GetDocument();  
+        ASSERT_VALID(pDoc);  
+        // TODO: add draw code for native data here  
+        FIBITMAP* dib = GenericLoader(strFileName);  
+      
+        int width = FreeImage_GetWidth(dib);  
+        int height = FreeImage_GetHeight(dib);  
+        BITMAPINFO* pBitmapInfo = FreeImage_GetInfo(dib);  
+        BYTE* pImgData = FreeImage_GetBits(dib);  
+        RGBQUAD* pPalette = FreeImage_GetPalette(dib);  
+        if(pPalette)  
+        {  
+            HPALETTE Pal = GetPalette(dib);  
+      
+            HPALETTE oldPal = ::SelectPalette(pDC->GetSafeHdc(),Pal,TRUE);  
+      
+            ::RealizePalette(pDC->GetSafeHdc());  
+            ::StretchDIBits(pDC->GetSafeHdc(),0,0,width,height,0,0,width,height,  
+                (const void*)pImgData,pBitmapInfo,DIB_RGB_COLORS,SRCCOPY);  
+          
+            ::SelectPalette(pDC->GetSafeHdc(),oldPal,TRUE);  
+            ::DeleteObject((HGLOBAL)Pal);  
+        }  
+        else  
+        {  
+            ::StretchDIBits(pDC->m_hDC,0,0,width,height,0,0,width,height,  
+            (const void*)pImgData,pBitmapInfo,DIB_RGB_COLORS,SRCCOPY);  
+        }  
+        FreeImage_Unload(dib);  
+    }
